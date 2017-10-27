@@ -79,6 +79,7 @@ import (
 	"io"
 	"io/ioutil"
 	"math"
+	"math/big"
 	"os"
 	"strings"
 	"sync"
@@ -141,7 +142,7 @@ type NaiveBayes struct {
 	// Probabilities holds the probability
 	// that class Y is class i as
 	// Probabilities[i] for
-	Probabilities []float64 `json:"probabilities"`
+	Probabilities []*big.Float `json:"probabilities"`
 
 	// DocumentCount holds the number of
 	// documents that have been seen
@@ -260,7 +261,7 @@ func NewNaiveBayes(stream <-chan base.TextDatapoint, classes uint8, sanitize fun
 	return &NaiveBayes{
 		Words:         concurrentMap{sync.RWMutex{}, make(map[string]Word)},
 		Count:         make([]uint64, classes),
-		Probabilities: make([]float64, classes),
+		Probabilities: make([]*big.Float, classes),
 
 		sanitize:  transform.RemoveFunc(sanitize),
 		stream:    stream,
@@ -291,7 +292,8 @@ func (b *NaiveBayes) Predict(sentence string) uint8 {
 	}
 
 	for i := range sums {
-		sums[i] += math.Log(b.Probabilities[i])
+		probability, _ := b.Probabilities[i].Float64()
+		sums[i] += math.Log(probability)
 	}
 
 	// find best class
@@ -322,10 +324,10 @@ func (b *NaiveBayes) Predict(sentence string) uint8 {
 // documents. Use Probability only on relatively small
 // (MAX of maybe a dozen words - basically just
 // sentences and words) documents.
-func (b *NaiveBayes) Probability(sentence string) (uint8, float64) {
-	sums := make([]float64, len(b.Count))
+func (b *NaiveBayes) Probability(sentence string) (int, *big.Float) {
+	sums := make([]*big.Float, len(b.Count))
 	for i := range sums {
-		sums[i] = 1
+		sums[i] = big.NewFloat(1.0)
 	}
 
 	sentence, _, _ = transform.String(b.sanitize, sentence)
@@ -337,25 +339,26 @@ func (b *NaiveBayes) Probability(sentence string) (uint8, float64) {
 		}
 
 		for i := range sums {
-			sums[i] *= float64(w.Count[i]+1) / float64(w.Seen+b.DictCount)
+			x := new(big.Float).Quo(big.NewFloat(float64(w.Count[i]+1)), big.NewFloat(float64(w.Seen+b.DictCount)))
+			sums[i] = new(big.Float).Mul(sums[i], x)
 		}
 	}
 
 	for i := range sums {
-		sums[i] *= b.Probabilities[i]
+		sums[i] = new(big.Float).Mul(b.Probabilities[i], sums[i])
 	}
 
-	var denom float64
+	denom := new(big.Float)
 	var maxI int
 	for i := range sums {
-		if sums[i] > sums[maxI] {
+		isGreaaterThanMax := sums[i].Cmp(sums[maxI])
+		if isGreaaterThanMax > 0 {
 			maxI = i
 		}
-
-		denom += sums[i]
+		denom = new(big.Float).Add(sums[i], denom)
 	}
-
-	return uint8(maxI), sums[maxI] / denom
+	probability := new(big.Float).Quo(sums[maxI], denom)
+	return maxI, probability
 }
 
 // OnlineLearn lets the NaiveBayes model learn
@@ -370,8 +373,6 @@ func (b *NaiveBayes) OnlineLearn(errors chan<- error) {
 		close(errors)
 		return
 	}
-
-	fmt.Fprintf(b.Output, "Training:\n\tModel: Multinomial Naïve Bayes\n\tClasses: %v\n", len(b.Count))
 
 	var point base.TextDatapoint
 	var more bool
@@ -395,7 +396,7 @@ func (b *NaiveBayes) OnlineLearn(errors chan<- error) {
 			b.Count[C]++
 			b.DocumentCount++
 			for i := range b.Probabilities {
-				b.Probabilities[i] = float64(b.Count[i]) / float64(b.DocumentCount)
+				b.Probabilities[i] = big.NewFloat(float64(b.Count[i]) / float64(b.DocumentCount))
 			}
 
 			// store words seen in document (to add to DocsSeen)
@@ -433,7 +434,6 @@ func (b *NaiveBayes) OnlineLearn(errors chan<- error) {
 				b.Words.Set(term, tmp)
 			}
 		} else {
-			fmt.Fprintf(b.Output, "Training Completed.\n%v\n\n", b)
 			close(errors)
 			return
 		}
