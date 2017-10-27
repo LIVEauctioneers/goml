@@ -9,7 +9,7 @@ import (
 	"math"
 	"os"
 
-	"github.com/cdipaolo/goml/base"
+	"github.com/LIVEauctioneers/goml/base"
 )
 
 // Softmax represents a softmax classification model
