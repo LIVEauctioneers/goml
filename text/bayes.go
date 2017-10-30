@@ -324,7 +324,7 @@ func (b *NaiveBayes) Predict(sentence string) uint8 {
 // documents. Use Probability only on relatively small
 // (MAX of maybe a dozen words - basically just
 // sentences and words) documents.
-func (b *NaiveBayes) Probability(sentence string) (int, *big.Float) {
+func (b *NaiveBayes) Probability(sentence string) (int, float64) {
 	sums := make([]*big.Float, len(b.Count))
 	for i := range sums {
 		sums[i] = big.NewFloat(1.0)
@@ -357,7 +357,7 @@ func (b *NaiveBayes) Probability(sentence string) (int, *big.Float) {
 		}
 		denom = new(big.Float).Add(sums[i], denom)
 	}
-	probability := new(big.Float).Quo(sums[maxI], denom)
+	probability, _ := new(big.Float).Quo(sums[maxI], denom).Float64()
 	return maxI, probability
 }
 
