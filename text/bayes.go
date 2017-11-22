@@ -404,10 +404,6 @@ func (b *NaiveBayes) OnlineLearn(errors chan<- error) {
 
 			// update probabilities for words
 			for _, word := range words {
-				if len(word) < 3 {
-					continue
-				}
-
 				w, ok := b.Words.Get(word)
 
 				if !ok {
