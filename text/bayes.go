@@ -161,7 +161,7 @@ type NaiveBayes struct {
 
 	// tokenizer is used by a model
 	// to split the input into tokens
-	Tokenizer Tokenizer `json:"tokenizer"`
+	Tokenizer Tokenizer `json:"-"`
 
 	// Output is the io.Writer used for logging
 	// and printing. Defaults to os.Stdout.
@@ -486,6 +486,26 @@ func (b *NaiveBayes) PersistToFile(path string) error {
 	}
 
 	return nil
+}
+
+func (b *NaiveBayes) PersistToBuffer() (buffer *bytes.Buffer, err error) {
+	bayesBytes, err := json.Marshal(b)
+	if err != nil {
+		return
+	}
+
+	buffer = bytes.NewBuffer(bayesBytes)
+
+	return
+}
+
+func (b *NaiveBayes) RestoreFromBuffer(buffer *bytes.Buffer) (err error) {
+	err = b.Restore(buffer.Bytes())
+	if err != nil {
+		return
+	}
+
+	return
 }
 
 // Restore takes the bytes of a NaiveBayes model and
